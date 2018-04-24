@@ -1,6 +1,7 @@
 package com.example.abhi.bletest;
 
 import android.Manifest;
+import android.app.ProgressDialog;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
@@ -20,6 +21,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.audiofx.AudioEffect;
 import android.os.Build;
 import android.os.Handler;
 import android.os.ParcelUuid;
@@ -49,6 +51,8 @@ import static android.bluetooth.BluetoothGattCharacteristic.PROPERTY_READ;
 import static android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE;
 import static android.bluetooth.BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE;
 import static android.bluetooth.BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE;
+import static android.bluetooth.BluetoothGattDescriptor.ENABLE_INDICATION_VALUE;
+import static android.bluetooth.BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE;
 import static android.bluetooth.BluetoothGattDescriptor.PERMISSION_READ;
 
 public class MainActivity extends AppCompatActivity {
@@ -95,9 +99,14 @@ public class MainActivity extends AppCompatActivity {
 
     public UUID[] uuids;
 
-    BluetoothGattCharacteristic bluetoothGattCharacteristic ;
+    BluetoothGattCharacteristic writeBluetoothGattCharacteristic ;
+    BluetoothGattCharacteristic readBluetoothGattCharacteristic ;
+    BluetoothGattDescriptor bluetoothGattDescriptor;
+
     private ScanSettings settings;
     private ArrayList<ScanFilter> filters;
+
+    ProgressDialog progress;
 
     @Override
     protected void onDestroy() {
@@ -149,7 +158,8 @@ public class MainActivity extends AppCompatActivity {
 
         checkforLocation();
 
-        bluetoothGattCharacteristic = new BluetoothGattCharacteristic(UUID.fromString("31517c58-66bf-470c-b662-e352a6c80cba"), PROPERTY_READ | PROPERTY_NOTIFY, PERMISSION_READ);
+        writeBluetoothGattCharacteristic = new BluetoothGattCharacteristic(UUID.fromString("31517c58-66bf-470c-b662-e352a6c80cba"), PROPERTY_READ | PROPERTY_NOTIFY, PERMISSION_READ);
+        readBluetoothGattCharacteristic = new BluetoothGattCharacteristic(UUID.fromString("31517c58-66bf-470c-b662-e352a6c80cba"), PROPERTY_READ | PROPERTY_NOTIFY, PERMISSION_READ);
 
         final BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
         mBluetoothAdapter = bluetoothManager.getAdapter();
@@ -161,9 +171,18 @@ public class MainActivity extends AppCompatActivity {
             startActivityForResult(enableBtIntent, 100);
         }
 
+        progress = new ProgressDialog(this);
+
+        findViewById(R.id.disconnect).setAlpha(0);
+        findViewById(R.id.disconnect).setClickable(false);
+
         findViewById(R.id.scan).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                progress.setMessage("Scanning...");
+                progress.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+                progress.setIndeterminate(true);
+                progress.show();
                 items.clear();
                 devices.clear();
                 itemsAdapter.notifyDataSetChanged();
@@ -174,7 +193,29 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.disconnect).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                items.clear();
+                devices.clear();
+                itemsAdapter.notifyDataSetChanged();
                 mBluetoothGatt.disconnect();
+            }
+        });
+
+        findViewById(R.id.writedesind).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                byte a[] = new byte[2];
+                a[1] = 2;
+                a[0] = 0;
+                WriteDescriptor(ENABLE_INDICATION_VALUE,mBluetoothGatt,bluetoothGattDescriptor);
+            }
+        });
+        findViewById(R.id.writedesnot).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                byte a[] = new byte[2];
+                a[1] = 1;
+                a[0] = 0;
+                WriteDescriptor(ENABLE_NOTIFICATION_VALUE,mBluetoothGatt,bluetoothGattDescriptor);
             }
         });
 
@@ -190,6 +231,10 @@ public class MainActivity extends AppCompatActivity {
         deviceListView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
             @Override
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                progress.setMessage("Connecting...");
+                progress.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+                progress.setIndeterminate(true);
+                progress.show();
                 statusTextView.setText("");
                 BluetoothDevice bluetoothDevice = devices.get(position);
                 //Toast.makeText(getBaseContext(),position+items.get(position)+devices.get(position).getName(),Toast.LENGTH_SHORT).show();
@@ -201,13 +246,43 @@ public class MainActivity extends AppCompatActivity {
 
         statusTextView = (TextView) findViewById(R.id.statusText);
 
+        final int[] i = {0};
+
         Button write = (Button) findViewById(R.id.write);
         write.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                WriteCharacteristic("Some".getBytes(),mBluetoothGatt,bluetoothGattCharacteristic);
+                byte some[] = new byte[1];
+
+                some[0] ='0';
+                Toast.makeText(getBaseContext(),""+some[0],Toast.LENGTH_SHORT).show();
+//                some[0]= (byte) i[0];
+                WriteCharacteristic(some,mBluetoothGatt,writeBluetoothGattCharacteristic);
+//                i[0]++;
+//                for (byte i=0;i<255;i++)
+//                {
+//                    final byte finalI[] = new byte[1];
+//                    finalI[0]= i;
+//                    new Handler().postDelayed(new Runnable() {
+//                        @Override
+//                        public void run() {
+//                            //Toast.makeText(getBaseContext(),"Sending "+(finalI+"").getBytes(),Toast.LENGTH_SHORT).show();
+//                            WriteCharacteristic(finalI,mBluetoothGatt,writeBluetoothGattCharacteristic);
+//                        }
+//                    },500);
+//
+//                }
             }
         });
+
+        Button read = (Button) findViewById(R.id.read);
+        read.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ReadCharacteristic(writeBluetoothGattCharacteristic,mBluetoothGatt);
+            }
+        });
+
     }
 
     private void scanLeDevice(final boolean enable) {
@@ -244,6 +319,9 @@ public class MainActivity extends AppCompatActivity {
     private ScanCallback mScanCallback = new ScanCallback() {
         @Override
         public void onScanResult(int callbackType, ScanResult result) {
+
+            if(progress.isShowing()) progress.dismiss();
+
             Log.i("callbackType", String.valueOf(callbackType));
             Log.i("result", result.toString());
             BluetoothDevice btDevice = result.getDevice();
@@ -251,8 +329,8 @@ public class MainActivity extends AppCompatActivity {
             String name = null;
             try {
                 assert scanRecord != null;
-                name = scanRecord.getDeviceName()+"-->"+scanRecord.getServiceData()+"-->"+scanRecord.getManufacturerSpecificData()+"-->"+scanRecord.getServiceUuids()+"-->"+new String(scanRecord.getBytes(),"UTF-8");
-            } catch (UnsupportedEncodingException e) {
+                name = scanRecord.getDeviceName()+"-->"+btDevice.getAddress();
+            } catch (Exception e) {
                 e.printStackTrace();
             }
 
@@ -401,8 +479,18 @@ public class MainActivity extends AppCompatActivity {
         return gatt.readCharacteristic(readCharacteristic);
     }
 
+    private void WriteDescriptor(byte[] buffer, BluetoothGatt gatt, BluetoothGattDescriptor descriptor) {
+        statusTextView.append("Writing to "+descriptor.getUuid().toString()+"---"+buffer+"\n");
+        //Set value that will be written
+
+        descriptor.setValue(buffer);
+        gatt.writeDescriptor(descriptor);
+
+    }
+
 
     private void WriteCharacteristic(byte[] buffer, BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+        statusTextView.append("Writing to "+characteristic.getUuid().toString()+"---"+buffer+"\n");
         //Set value that will be written
         characteristic.setValue(buffer);
         //Set writing type
@@ -412,10 +500,11 @@ public class MainActivity extends AppCompatActivity {
 
 
     public void SubscribeCharacteristic(BluetoothGattCharacteristic characteristic, BluetoothGatt gatt) {
+        statusTextView.append("Subscribing to "+characteristic.getUuid().toString()+"\n");
         gatt.setCharacteristicNotification(characteristic, true);
-        //BluetoothGattDescriptor descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"));
-        //descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-        //gatt.writeDescriptor(descriptor);
+        BluetoothGattDescriptor descriptor = characteristic.getDescriptor(UUID.fromString("00002902-0000-1000-8000-00805f9b34fb"));
+        descriptor.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+        gatt.writeDescriptor(descriptor);
     }
 
 
@@ -441,6 +530,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, final int status,
                                             final int newState) {
+            if(progress.isShowing()) progress.dismiss();
             //Toast.makeText(getBaseContext(),""+status+" "+newState,Toast.LENGTH_SHORT).show();
             MainActivity.this.runOnUiThread(new Runnable() {
                 @Override
@@ -458,6 +548,9 @@ public class MainActivity extends AppCompatActivity {
                     public void run() {
                         statusTextView.append("connected\n");
                         findViewById(R.id.disconnect).setAlpha(1);
+                        findViewById(R.id.disconnect).setClickable(true);
+                        findViewById(R.id.scan).setAlpha(0);
+                        findViewById(R.id.scan).setClickable(false);
                     }
                 });
                 Log.e("TAG", "Connected to GATT server.");
@@ -473,6 +566,9 @@ public class MainActivity extends AppCompatActivity {
                     public void run() {
                         statusTextView.append("disconnected\n");
                         findViewById(R.id.disconnect).setAlpha(0);
+                        findViewById(R.id.disconnect).setClickable(false);
+                        findViewById(R.id.scan).setAlpha(1);
+                        findViewById(R.id.scan).setClickable(true);
                     }
                 });
                 broadcastUpdate(intentAction);
@@ -489,6 +585,40 @@ public class MainActivity extends AppCompatActivity {
                 Log.e("TAG", "onServicesDiscovered received: " + status);
             }
 
+        }
+
+        @Override
+        public void onDescriptorRead(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            super.onDescriptorRead(gatt, descriptor, status);
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                //broadcastUpdate(ACTION_DATA_AVAILABLE);
+
+                String val="error read";
+                try {
+                    val=new String(descriptor.getValue(),"UTF-8");
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                }
+
+                statusTextView.append("Result of a descriptor read operation"+val);
+            }
+        }
+
+        @Override
+        public void onDescriptorWrite(BluetoothGatt gatt, BluetoothGattDescriptor descriptor, int status) {
+            super.onDescriptorWrite(gatt, descriptor, status);
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                //broadcastUpdate(ACTION_DATA_AVAILABLE);
+
+                String val="error read";
+                try {
+                    val=new String(descriptor.getValue(),"UTF-8");
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                }
+
+                statusTextView.append("Result of a descriptor write operation"+val);
+            }
         }
 
         @Override
@@ -562,6 +692,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    int i=0,j=0;
+
     private void displayGattServices(List<BluetoothGattService> gattServices) {
 
         // Loops through available GATT Services.
@@ -597,20 +729,25 @@ public class MainActivity extends AppCompatActivity {
                         }
                         if(isCharacterisiticNotifiable(gattCharacteristic))
                         {
-                            //SubscribeCharacteristic(gattCharacteristic,mBluetoothGatt);
+                            SubscribeCharacteristic(gattCharacteristic,mBluetoothGatt);
                             statusTextView.append("Notify"+ "\n");
 
                         }
                         if(isCharacteristicWriteable(gattCharacteristic))
                         {
-                            //mBluetoothGatt.writeCharacteristic(gattCharacteristic);
-                            bluetoothGattCharacteristic = gattCharacteristic;
-                            statusTextView.append("Writing"+ "\n");
+                            final int finali = i;
+                            i++;
+                            if(i==2) {
+                                //mBluetoothGatt.writeCharacteristic(gattCharacteristic);
+                                writeBluetoothGattCharacteristic = gattCharacteristic;
+                                statusTextView.append("Writing" + "\n");
+                            }
 
                         }
                         if(isCharacteristicIndiacateable(gattCharacteristic))
                         {
-                            bluetoothGattCharacteristic = gattCharacteristic;
+                            SubscribeCharacteristic(gattCharacteristic,mBluetoothGatt);
+                            readBluetoothGattCharacteristic = gattCharacteristic;
                             statusTextView.append("Indicatable"+ "\n");
 
                         }
@@ -618,6 +755,26 @@ public class MainActivity extends AppCompatActivity {
 
                     }
                 });
+
+                List<BluetoothGattDescriptor> gattDescriptors =
+                        gattCharacteristic.getDescriptors();
+
+                for (final BluetoothGattDescriptor gattDescriptor :
+                        gattDescriptors)
+                {
+                    uuid = gattDescriptor.getUuid().toString();
+                    final String finalUuid2 = uuid;
+                    MainActivity.this.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            statusTextView.append("        descriptor discovered" + finalUuid2 + "\n");
+                            gattDescriptor.getPermissions();
+                            bluetoothGattDescriptor=gattDescriptor;
+                        }
+
+                    });
+                }
+
             }
         }
     }
